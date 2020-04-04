@@ -52,3 +52,7 @@ require (
 	gopkg.in/ini.v1 v1.55.0 // indirect
 	gopkg.in/yaml.v2 v2.2.8
 )
+
+// Temporary until https://github.com/bmatcuk/doublestar/pull/34 and
+// https://github.com/bmatcuk/doublestar/pull/35 are merged.
+replace github.com/bmatcuk/doublestar => github.com/twpayne/doublestar v1.2.6
