@@ -225,19 +225,7 @@ func (ss *SourceState) Read() error {
 					},
 				}
 			}
-			perm := os.FileMode(0o777)
-			if dirAttributes.Private {
-				perm &^= 0o77
-			}
-			targetStateDir := &TargetStateDir{
-				perm:  perm &^ ss.umask,
-				exact: dirAttributes.Exact,
-			}
-			ss.entries[targetName] = &SourceStateDir{
-				path:             sourcePath,
-				attributes:       dirAttributes,
-				targetStateEntry: targetStateDir,
-			}
+			ss.entries[targetName] = ss.newSourceStateDir(sourcePath, dirAttributes)
 			return nil
 		case info.Mode().IsRegular():
 			fileAttributes := ParseFileAttributes(sourceName)
@@ -384,6 +372,25 @@ func (ss *SourceState) executeTemplate(path string) ([]byte, error) {
 		return nil, err
 	}
 	return ss.ExecuteTemplateData(path, data)
+}
+
+func (ss *SourceState) newSourceStateDir(sourcePath string, dirAttributes DirAttributes) *SourceStateDir {
+	perm := os.FileMode(0o777)
+	if dirAttributes.Private {
+		perm &^= 0o77
+	}
+	perm &^= ss.umask
+
+	targetStateDir := &TargetStateDir{
+		perm:  perm,
+		exact: dirAttributes.Exact,
+	}
+
+	return &SourceStateDir{
+		path:             sourcePath,
+		attributes:       dirAttributes,
+		targetStateEntry: targetStateDir,
+	}
 }
 
 func (ss *SourceState) newSourceStateFile(sourcePath string, fileAttributes FileAttributes) *SourceStateFile {
