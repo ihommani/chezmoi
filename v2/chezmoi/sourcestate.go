@@ -25,7 +25,7 @@ type SourceState struct {
 	s               System
 	sourcePath      string
 	umask           os.FileMode
-	entries         map[string]SourceStateEntry
+	sourceEntries   map[string]SourceStateEntry
 	ignore          *PatternSet
 	minVersion      *semver.Version
 	remove          *PatternSet
@@ -84,7 +84,7 @@ func WithUmask(umask os.FileMode) SourceStateOption {
 func NewSourceState(options ...SourceStateOption) *SourceState {
 	ss := &SourceState{
 		umask:           0o22,
-		entries:         make(map[string]SourceStateEntry),
+		sourceEntries:   make(map[string]SourceStateEntry),
 		ignore:          NewPatternSet(),
 		remove:          NewPatternSet(),
 		templateOptions: DefaultTemplateOptions,
@@ -117,7 +117,7 @@ func (ss *SourceState) ApplyOne(s System, umask os.FileMode, targetDir, targetNa
 	if err != nil {
 		return err
 	}
-	targetStateEntry, err := ss.entries[targetName].TargetStateEntry()
+	targetStateEntry, err := ss.sourceEntries[targetName].TargetStateEntry()
 	if err != nil {
 		return err
 	}
@@ -138,7 +138,7 @@ func (ss *SourceState) ApplyOne(s System, umask os.FileMode, targetDir, targetNa
 			}
 			sort.Strings(baseNames)
 			for _, baseName := range baseNames {
-				if _, ok := ss.entries[path.Join(targetName, baseName)]; !ok {
+				if _, ok := ss.sourceEntries[path.Join(targetName, baseName)]; !ok {
 					if err := s.RemoveAll(path.Join(targetPath, baseName)); err != nil {
 						return err
 					}
@@ -172,7 +172,7 @@ func (ss *SourceState) ExecuteTemplateData(name string, data []byte) ([]byte, er
 // Read reads a source state from sourcePath in fs.
 func (ss *SourceState) Read() error {
 	// Read all source entries.
-	allEntries := make(map[string][]SourceStateEntry)
+	allSourceEntries := make(map[string][]SourceStateEntry)
 	sourceDirPrefix := filepath.ToSlash(ss.sourcePath) + pathSeparator
 	if err := vfs.Walk(ss.s, ss.sourcePath, func(sourcePath string, info os.FileInfo, err error) error {
 		sourcePath = filepath.ToSlash(sourcePath)
@@ -208,7 +208,8 @@ func (ss *SourceState) Read() error {
 			if ss.ignore.Match(targetName) {
 				return nil
 			}
-			allEntries[targetName] = append(allEntries[targetName], ss.newSourceStateDir(sourcePath, dirAttributes))
+			sourceEntry := ss.newSourceStateDir(sourcePath, dirAttributes)
+			allSourceEntries[targetName] = append(allSourceEntries[targetName], sourceEntry)
 			return nil
 		case info.Mode().IsRegular():
 			fileAttributes := ParseFileAttributes(sourceName)
@@ -216,7 +217,8 @@ func (ss *SourceState) Read() error {
 			if ss.ignore.Match(targetName) {
 				return nil
 			}
-			allEntries[targetName] = append(allEntries[targetName], ss.newSourceStateFile(sourcePath, fileAttributes))
+			sourceEntry := ss.newSourceStateFile(sourcePath, fileAttributes)
+			allSourceEntries[targetName] = append(allSourceEntries[targetName], sourceEntry)
 			return nil
 		default:
 			return &unsupportedFileTypeError{
@@ -231,18 +233,18 @@ func (ss *SourceState) Read() error {
 	// Checking for duplicate source entries with the same target name. Iterate
 	// over the target names in order so the error is deterministic.
 	var err error
-	targetNames := make([]string, 0, len(allEntries))
-	for targetName := range allEntries {
+	targetNames := make([]string, 0, len(allSourceEntries))
+	for targetName := range allSourceEntries {
 		targetNames = append(targetNames, targetName)
 	}
 	sort.Strings(targetNames)
 	for _, targetName := range targetNames {
-		entries := allEntries[targetName]
-		if len(entries) == 1 {
+		sourceEntries := allSourceEntries[targetName]
+		if len(sourceEntries) == 1 {
 			continue
 		}
-		sourcePaths := make([]string, 0, len(entries))
-		for _, sourceEntry := range entries {
+		sourcePaths := make([]string, 0, len(sourceEntries))
+		for _, sourceEntry := range sourceEntries {
 			sourcePaths = append(sourcePaths, sourceEntry.Path())
 		}
 		err = multierr.Append(err, &duplicateTargetError{
@@ -254,9 +256,9 @@ func (ss *SourceState) Read() error {
 		return err
 	}
 
-	// Populate ss.entries.
-	for targetName, sourceEntries := range allEntries {
-		ss.entries[targetName] = sourceEntries[0]
+	// Populate ss.sourceEntries with the unique source entry for each target.
+	for targetName, sourceEntries := range allSourceEntries {
+		ss.sourceEntries[targetName] = sourceEntries[0]
 	}
 	return nil
 }
@@ -293,7 +295,7 @@ func (ss *SourceState) Remove(s System, targetDir string) error {
 // Evaluate evaluates every target state entry in s.
 func (ss *SourceState) Evaluate() error {
 	for _, targetName := range ss.sortedTargetNames() {
-		sourceStateEntry := ss.entries[targetName]
+		sourceStateEntry := ss.sourceEntries[targetName]
 		if err := sourceStateEntry.Evaluate(); err != nil {
 			return err
 		}
@@ -482,8 +484,8 @@ func (ss *SourceState) newSourceStateFile(sourcePath string, fileAttributes File
 }
 
 func (ss *SourceState) sortedTargetNames() []string {
-	targetNames := make([]string, 0, len(ss.entries))
-	for targetName := range ss.entries {
+	targetNames := make([]string, 0, len(ss.sourceEntries))
+	for targetName := range ss.sourceEntries {
 		targetNames = append(targetNames, targetName)
 	}
 	sort.Strings(targetNames)

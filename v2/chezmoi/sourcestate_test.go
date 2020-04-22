@@ -627,9 +627,9 @@ func TestSourceStateRemove(t *testing.T) {
 	}
 }
 
-func withEntries(entries map[string]SourceStateEntry) SourceStateOption {
+func withEntries(sourceEntries map[string]SourceStateEntry) SourceStateOption {
 	return func(ss *SourceState) {
-		ss.entries = entries
+		ss.sourceEntries = sourceEntries
 	}
 }
 
