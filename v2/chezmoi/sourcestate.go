@@ -438,6 +438,12 @@ func (ss *SourceState) newSourceStateFile(sourcePath string, fileAttributes File
 			if err != nil {
 				return nil, err
 			}
+			if fileAttributes.Template {
+				contents, err = ss.ExecuteTemplateData(sourcePath, contents)
+				if err != nil {
+					return nil, err
+				}
+			}
 			if !fileAttributes.Empty && isEmpty(contents) {
 				return &TargetStateAbsent{}, nil
 			}
@@ -460,6 +466,12 @@ func (ss *SourceState) newSourceStateFile(sourcePath string, fileAttributes File
 			if err != nil {
 				return nil, err
 			}
+			if fileAttributes.Template {
+				contents, err = ss.ExecuteTemplateData(sourcePath, contents)
+				if err != nil {
+					return nil, err
+				}
+			}
 			return &TargetStateScript{
 				lazyContents: newLazyContents(contents),
 				name:         fileAttributes.Name,
@@ -471,6 +483,12 @@ func (ss *SourceState) newSourceStateFile(sourcePath string, fileAttributes File
 			linknameBytes, err := lazyContents.Contents()
 			if err != nil {
 				return nil, err
+			}
+			if fileAttributes.Template {
+				linknameBytes, err = ss.ExecuteTemplateData(sourcePath, linknameBytes)
+				if err != nil {
+					return nil, err
+				}
 			}
 			return &TargetStateSymlink{
 				lazyLinkname: newLazyLinkname(string(linknameBytes)),

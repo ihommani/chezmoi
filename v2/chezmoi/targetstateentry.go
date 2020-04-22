@@ -1,5 +1,7 @@
 package chezmoi
 
+// FIXME I don't think we need to use lazyContents here, except the SHA256 stuff is useful
+
 import (
 	"bytes"
 	"encoding/hex"
