@@ -9,6 +9,7 @@ import (
 	"github.com/bmatcuk/doublestar"
 	"github.com/google/renameio"
 	vfs "github.com/twpayne/go-vfs"
+	"go.uber.org/multierr"
 )
 
 // An RealSystem is a System that writes to a filesystem and executes scripts.
@@ -45,27 +46,26 @@ func (s *RealSystem) PathSeparator() rune {
 }
 
 // RunScript implements System.RunScript.
-func (s *RealSystem) RunScript(name string, data []byte) error {
+func (s *RealSystem) RunScript(name string, data []byte) (err error) {
 	// Write the temporary script file. Put the randomness at the front of the
 	// filename to preserve any file extension for Windows scripts.
 	f, err := ioutil.TempFile("", "*."+path.Base(name))
 	if err != nil {
-		return err
+		return
 	}
 	defer func() {
-		_ = os.RemoveAll(f.Name())
+		err = multierr.Append(err, os.RemoveAll(f.Name()))
 	}()
 
 	// Make the script private before writing it in case it contains any
 	// secrets.
-	if err := f.Chmod(0o700); err != nil {
-		return err
+	if err = f.Chmod(0o700); err != nil {
+		return
 	}
 	_, err = f.Write(data)
-	if err1 := f.Close(); err != nil {
-		return err
-	} else if err1 != nil {
-		return err1
+	err = multierr.Append(err, f.Close())
+	if err != nil {
+		return
 	}
 
 	// Run the temporary script file.
@@ -75,7 +75,8 @@ func (s *RealSystem) RunScript(name string, data []byte) error {
 	c.Stdin = os.Stdin
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
-	return c.Run()
+	err = c.Run()
+	return
 }
 
 // WriteSymlink implements System.WriteSymlink.
@@ -94,31 +95,23 @@ func (s *RealSystem) WriteSymlink(oldname, newname string) error {
 // WriteFile is like ioutil.WriteFile but always sets perm before writing data.
 // ioutil.WriteFile only sets the permissions when creating a new file. We need
 // to ensure permissions, so we use our own implementation.
-func WriteFile(fs vfs.FS, filename string, data []byte, perm os.FileMode) error {
+func WriteFile(fs vfs.FS, filename string, data []byte, perm os.FileMode) (err error) {
 	// Create a new file, or truncate any existing one.
 	f, err := fs.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
 	if err != nil {
-		return err
+		return
 	}
-
-	// From now on, we continue to the end of the function to ensure that
-	// f.Close() gets called so we don't leak any file descriptors.
+	defer func() {
+		err = multierr.Append(err, f.Close())
+	}()
 
 	// Set permissions after truncation but before writing any data, in case the
 	// file contained private data before, but before writing the new contents,
 	// in case the contents contain private data after.
-	err = f.Chmod(perm)
-
-	// If everything is OK so far, write the data.
-	if err == nil {
-		_, err = f.Write(data)
+	if err = f.Chmod(perm); err != nil {
+		return
 	}
 
-	// Always call f.Close(), and overwrite the error if so far there is none.
-	if err1 := f.Close(); err == nil {
-		err = err1
-	}
-
-	// Return the first error encountered.
+	_, err = f.Write(data)
 	return err
 }
