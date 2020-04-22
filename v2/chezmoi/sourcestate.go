@@ -1,6 +1,5 @@
 package chezmoi
 
-// FIXME accumulate all source state warnings/errors
 // FIXME encryption
 // FIXME templates
 
@@ -183,11 +182,11 @@ func (ss *SourceState) Read() error {
 			return nil
 		}
 		relPath := strings.TrimPrefix(sourcePath, sourceDirPrefix)
-		dir, sourceName := path.Split(relPath)
-		targetDirName := getTargetDirName(dir)
+		sourceDirName, sourceName := path.Split(relPath)
+		targetDirName := getTargetDirName(sourceDirName)
 		switch {
 		case info.Name() == ignoreName:
-			return ss.addPatterns(ss.ignore, sourcePath, dir)
+			return ss.addPatterns(ss.ignore, sourcePath, sourceDirName)
 		case info.Name() == removeName:
 			return ss.addPatterns(ss.remove, sourcePath, targetDirName)
 		case info.Name() == templatesDirName:
@@ -231,7 +230,7 @@ func (ss *SourceState) Read() error {
 	}
 
 	// Checking for duplicate source entries with the same target name. Iterate
-	// over the target names in order so the error is deterministic.
+	// over the target names in order so that any error is deterministic.
 	var err error
 	targetNames := make([]string, 0, len(allSourceEntries))
 	for targetName := range allSourceEntries {
@@ -282,6 +281,9 @@ func (ss *SourceState) Remove(s System, targetDir string) error {
 		}
 	}
 
+	// Remove targets in order. Parent directories are removed before their
+	// children, which is okay because RemoveAll does not treat os.ErrNotExist
+	// as an error.
 	sortedTargetPathsToRemove := targetPathsToRemove.Elements()
 	sort.Strings(sortedTargetPathsToRemove)
 	for _, targetPath := range sortedTargetPathsToRemove {
@@ -376,6 +378,9 @@ func (ss *SourceState) addTemplatesDir(templateDir string) error {
 	})
 }
 
+// addVersionFile reads a .chezmoiversion file from source path and updates ss's
+// minimum version if it contains a more recent version than the current minimum
+// version.
 func (ss *SourceState) addVersionFile(sourcePath string) error {
 	data, err := ss.s.ReadFile(sourcePath)
 	if err != nil {
@@ -483,6 +488,7 @@ func (ss *SourceState) newSourceStateFile(sourcePath string, fileAttributes File
 	}
 }
 
+// sortedTargetNames returns all of ss's target names in order.
 func (ss *SourceState) sortedTargetNames() []string {
 	targetNames := make([]string, 0, len(ss.sourceEntries))
 	for targetName := range ss.sourceEntries {
@@ -492,8 +498,9 @@ func (ss *SourceState) sortedTargetNames() []string {
 	return targetNames
 }
 
-func getTargetDirName(dir string) string {
-	sourceNames := strings.Split(dir, pathSeparator)
+// getTargetDirName returns the target directory name of sourceDirName.
+func getTargetDirName(sourceDirName string) string {
+	sourceNames := strings.Split(sourceDirName, pathSeparator)
 	targetNames := make([]string, 0, len(sourceNames))
 	for _, sourceName := range sourceNames {
 		dirAttributes := ParseDirAttributes(sourceName)
