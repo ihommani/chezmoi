@@ -172,7 +172,7 @@ func (ss *SourceState) ExecuteTemplateData(name string, data []byte) ([]byte, er
 func (ss *SourceState) Read() error {
 	// Read all source entries.
 	allSourceEntries := make(map[string][]SourceStateEntry)
-	sourceDirPrefix := filepath.ToSlash(ss.sourcePath) + pathSeparator
+	sourceDirPrefix := filepath.ToSlash(ss.sourcePath) + pathSeparatorStr
 	if err := vfs.Walk(ss.s, ss.sourcePath, func(sourcePath string, info os.FileInfo, err error) error {
 		sourcePath = filepath.ToSlash(sourcePath)
 		if err != nil {
@@ -265,7 +265,7 @@ func (ss *SourceState) Read() error {
 // Remove removes everything in targetDir that matches s's remove pattern set.
 func (ss *SourceState) Remove(s System, targetDir string) error {
 	// Build a set of targets to remove.
-	targetDirPrefix := targetDir + pathSeparator
+	targetDirPrefix := targetDir + pathSeparatorStr
 	targetPathsToRemove := NewStringSet()
 	for include := range ss.remove.includes {
 		matches, err := s.Glob(path.Join(targetDir, include))
@@ -345,7 +345,7 @@ func (ss *SourceState) addPatterns(ps *PatternSet, path, relPath string) error {
 }
 
 func (ss *SourceState) addTemplatesDir(templateDir string) error {
-	templateDirPrefix := filepath.ToSlash(templateDir) + pathSeparator
+	templateDirPrefix := filepath.ToSlash(templateDir) + pathSeparatorStr
 	return vfs.Walk(ss.s, templateDir, func(templatePath string, info os.FileInfo, err error) error {
 		templatePath = filepath.ToSlash(templatePath)
 		if err != nil {
@@ -500,11 +500,11 @@ func (ss *SourceState) sortedTargetNames() []string {
 
 // getTargetDirName returns the target directory name of sourceDirName.
 func getTargetDirName(sourceDirName string) string {
-	sourceNames := strings.Split(sourceDirName, pathSeparator)
+	sourceNames := strings.Split(sourceDirName, pathSeparatorStr)
 	targetNames := make([]string, 0, len(sourceNames))
 	for _, sourceName := range sourceNames {
 		dirAttributes := ParseDirAttributes(sourceName)
 		targetNames = append(targetNames, dirAttributes.Name)
 	}
-	return strings.Join(targetNames, pathSeparator)
+	return strings.Join(targetNames, pathSeparatorStr)
 }

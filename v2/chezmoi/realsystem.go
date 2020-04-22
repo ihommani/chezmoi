@@ -42,7 +42,7 @@ func (s *RealSystem) IdempotentCmdOutput(cmd *exec.Cmd) ([]byte, error) {
 
 // PathSeparator implements doublestar.OS.PathSeparator.
 func (s *RealSystem) PathSeparator() rune {
-	return pathSeparatorRune
+	return pathSeparator
 }
 
 // RunScript implements System.RunScript.

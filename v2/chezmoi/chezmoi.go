@@ -7,9 +7,9 @@ import (
 
 // Configuration constants.
 const (
-	pathSeparatorRune = '/'
-	pathSeparator     = string(pathSeparatorRune)
-	ignorePrefix      = "."
+	pathSeparator    = '/'
+	pathSeparatorStr = string(pathSeparator)
+	ignorePrefix     = "."
 )
 
 // Configuration variables.
