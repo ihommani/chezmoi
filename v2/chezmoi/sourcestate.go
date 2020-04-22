@@ -17,6 +17,7 @@ import (
 
 	"github.com/coreos/go-semver/semver"
 	vfs "github.com/twpayne/go-vfs"
+	"go.uber.org/multierr"
 )
 
 // A SourceState is a source state.
@@ -170,8 +171,10 @@ func (ss *SourceState) ExecuteTemplateData(name string, data []byte) ([]byte, er
 
 // Read reads a source state from sourcePath in fs.
 func (ss *SourceState) Read() error {
+	// Read all source entries.
+	allEntries := make(map[string][]SourceStateEntry)
 	sourceDirPrefix := filepath.ToSlash(ss.sourcePath) + pathSeparator
-	return vfs.Walk(ss.s, ss.sourcePath, func(sourcePath string, info os.FileInfo, err error) error {
+	if err := vfs.Walk(ss.s, ss.sourcePath, func(sourcePath string, info os.FileInfo, err error) error {
 		sourcePath = filepath.ToSlash(sourcePath)
 		if err != nil {
 			return err
@@ -193,18 +196,7 @@ func (ss *SourceState) Read() error {
 			}
 			return filepath.SkipDir
 		case info.Name() == versionName:
-			data, err := ss.s.ReadFile(sourcePath)
-			if err != nil {
-				return err
-			}
-			version, err := semver.NewVersion(strings.TrimSpace(string(data)))
-			if err != nil {
-				return err
-			}
-			if ss.minVersion == nil || ss.minVersion.LessThan(*version) {
-				ss.minVersion = version
-			}
-			return nil
+			return ss.addVersionFile(sourcePath)
 		case strings.HasPrefix(info.Name(), ignorePrefix):
 			if info.IsDir() {
 				return filepath.SkipDir
@@ -216,16 +208,7 @@ func (ss *SourceState) Read() error {
 			if ss.ignore.Match(targetName) {
 				return nil
 			}
-			if sourceStateEntry, ok := ss.entries[targetName]; ok {
-				return &duplicateTargetError{
-					targetName: targetName,
-					sourcePaths: []string{
-						sourceStateEntry.Path(),
-						sourcePath,
-					},
-				}
-			}
-			ss.entries[targetName] = ss.newSourceStateDir(sourcePath, dirAttributes)
+			allEntries[targetName] = append(allEntries[targetName], ss.newSourceStateDir(sourcePath, dirAttributes))
 			return nil
 		case info.Mode().IsRegular():
 			fileAttributes := ParseFileAttributes(sourceName)
@@ -233,16 +216,7 @@ func (ss *SourceState) Read() error {
 			if ss.ignore.Match(targetName) {
 				return nil
 			}
-			if sourceStateEntry, ok := ss.entries[targetName]; ok {
-				return &duplicateTargetError{
-					targetName: targetName,
-					sourcePaths: []string{
-						sourceStateEntry.Path(),
-						sourcePath,
-					},
-				}
-			}
-			ss.entries[targetName] = ss.newSourceStateFile(sourcePath, fileAttributes)
+			allEntries[targetName] = append(allEntries[targetName], ss.newSourceStateFile(sourcePath, fileAttributes))
 			return nil
 		default:
 			return &unsupportedFileTypeError{
@@ -250,7 +224,41 @@ func (ss *SourceState) Read() error {
 				mode: info.Mode(),
 			}
 		}
-	})
+	}); err != nil {
+		return err
+	}
+
+	// Checking for duplicate source entries with the same target name. Iterate
+	// over the target names in order so the error is deterministic.
+	var err error
+	targetNames := make([]string, 0, len(allEntries))
+	for targetName := range allEntries {
+		targetNames = append(targetNames, targetName)
+	}
+	sort.Strings(targetNames)
+	for _, targetName := range targetNames {
+		entries := allEntries[targetName]
+		if len(entries) == 1 {
+			continue
+		}
+		sourcePaths := make([]string, 0, len(entries))
+		for _, sourceEntry := range entries {
+			sourcePaths = append(sourcePaths, sourceEntry.Path())
+		}
+		err = multierr.Append(err, &duplicateTargetError{
+			targetName:  targetName,
+			sourcePaths: sourcePaths,
+		})
+	}
+	if err != nil {
+		return err
+	}
+
+	// Populate ss.entries.
+	for targetName, sourceEntries := range allEntries {
+		ss.entries[targetName] = sourceEntries[0]
+	}
+	return nil
 }
 
 // Remove removes everything in targetDir that matches s's remove pattern set.
@@ -364,6 +372,21 @@ func (ss *SourceState) addTemplatesDir(templateDir string) error {
 			}
 		}
 	})
+}
+
+func (ss *SourceState) addVersionFile(sourcePath string) error {
+	data, err := ss.s.ReadFile(sourcePath)
+	if err != nil {
+		return err
+	}
+	version, err := semver.NewVersion(strings.TrimSpace(string(data)))
+	if err != nil {
+		return err
+	}
+	if ss.minVersion == nil || ss.minVersion.LessThan(*version) {
+		ss.minVersion = version
+	}
+	return nil
 }
 
 func (ss *SourceState) executeTemplate(path string) ([]byte, error) {
