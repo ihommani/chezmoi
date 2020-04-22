@@ -17,6 +17,13 @@ type lazyLinkname struct {
 	linknameErr  error
 }
 
+// newLazyContents returns a new lazyContents with contents.
+func newLazyContents(contents []byte) *lazyContents {
+	return &lazyContents{
+		contents: contents,
+	}
+}
+
 // Contents returns e's contents.
 func (lc *lazyContents) Contents() ([]byte, error) {
 	if lc == nil {
@@ -45,6 +52,13 @@ func (lc *lazyContents) ContentsSHA256() ([]byte, error) {
 		lc.contentsSHA256 = sha256Sum(contents)
 	}
 	return lc.contentsSHA256, nil
+}
+
+// newLazyLinkname returns a new lazyLinkname with linkname.
+func newLazyLinkname(linkname string) *lazyLinkname {
+	return &lazyLinkname{
+		linkname: linkname,
+	}
 }
 
 // Linkname returns s's linkname.

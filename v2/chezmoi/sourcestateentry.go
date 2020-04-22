@@ -8,7 +8,7 @@ import (
 type SourceStateEntry interface {
 	Evaluate() error
 	Path() string
-	TargetStateEntry() TargetStateEntry
+	TargetStateEntry() (TargetStateEntry, error)
 	Write(s System, umask os.FileMode) error
 }
 
@@ -22,9 +22,11 @@ type SourceStateDir struct {
 // A SourceStateFile represents the state of a file in the source state.
 type SourceStateFile struct {
 	*lazyContents
-	path             string
-	attributes       FileAttributes
-	targetStateEntry TargetStateEntry
+	path                 string
+	attributes           FileAttributes
+	targetStateEntryFunc func() (TargetStateEntry, error)
+	targetStateEntry     TargetStateEntry
+	targetStateEntryErr  error
 }
 
 // Evaluate evaluates s and returns any error.
@@ -38,8 +40,8 @@ func (s *SourceStateDir) Path() string {
 }
 
 // TargetStateEntry returns s's target state entry.
-func (s *SourceStateDir) TargetStateEntry() TargetStateEntry {
-	return s.targetStateEntry
+func (s *SourceStateDir) TargetStateEntry() (TargetStateEntry, error) {
+	return s.targetStateEntry, nil
 }
 
 // Write writes s to sourceStateDir.
@@ -59,8 +61,12 @@ func (s *SourceStateFile) Path() string {
 }
 
 // TargetStateEntry returns s's target state entry.
-func (s *SourceStateFile) TargetStateEntry() TargetStateEntry {
-	return s.targetStateEntry
+func (s *SourceStateFile) TargetStateEntry() (TargetStateEntry, error) {
+	if s.targetStateEntryFunc != nil {
+		s.targetStateEntry, s.targetStateEntryErr = s.targetStateEntryFunc()
+		s.targetStateEntryFunc = nil
+	}
+	return s.targetStateEntry, s.targetStateEntryErr
 }
 
 // Write writes s to sourceStateDir.

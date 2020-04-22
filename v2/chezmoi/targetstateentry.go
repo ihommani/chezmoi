@@ -26,15 +26,15 @@ type TargetStateDir struct {
 
 // A TargetStateFile represents the state of a file in the target state.
 type TargetStateFile struct {
-	perm os.FileMode
 	*lazyContents
+	perm os.FileMode
 }
 
 // A TargetStateScript represents the state of a script.
 type TargetStateScript struct {
+	*lazyContents
 	name string
 	once bool
-	*lazyContents
 }
 
 // A TargetStateSymlink represents the state of a symlink in the target state.
@@ -153,7 +153,6 @@ func (t *TargetStateFile) Evaluate() error {
 
 // Apply runs t.
 func (t *TargetStateScript) Apply(s System, destStateEntry DestStateEntry) error {
-	// FIXME need to compute SHA256 of contents *after* trimming space!
 	var (
 		bucket     = scriptOnceStateBucket
 		key        []byte
@@ -180,8 +179,7 @@ func (t *TargetStateScript) Apply(s System, destStateEntry DestStateEntry) error
 	if err != nil {
 		return err
 	}
-	if len(bytes.TrimSpace(contents)) == 0 {
-		// Don't execute empty scripts.
+	if isEmpty(contents) {
 		return nil
 	}
 	if err := s.RunScript(t.name, contents); err != nil {
@@ -261,4 +259,8 @@ func (t *TargetStateSymlink) Equal(destStateEntry DestStateEntry) (bool, error) 
 func (t *TargetStateSymlink) Evaluate() error {
 	_, err := t.Linkname()
 	return err
+}
+
+func isEmpty(data []byte) bool {
+	return len(bytes.TrimSpace(data)) == 0
 }

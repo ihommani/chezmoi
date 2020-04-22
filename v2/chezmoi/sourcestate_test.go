@@ -81,6 +81,39 @@ func TestSourceStateApplyAll(t *testing.T) {
 			},
 		},
 		{
+			name: "remove_empty",
+			root: map[string]interface{}{
+				"/home/user": map[string]interface{}{
+					"foo": "",
+					".local/share/chezmoi": map[string]interface{}{
+						"foo": "",
+					},
+				},
+			},
+			tests: []interface{}{
+				vfst.TestPath("/home/user/foo",
+					vfst.TestDoesNotExist,
+				),
+			},
+		},
+		{
+			name: "create_empty_file",
+			root: map[string]interface{}{
+				"/home/user": map[string]interface{}{
+					".local/share/chezmoi": map[string]interface{}{
+						"empty_foo": "",
+					},
+				},
+			},
+			tests: []interface{}{
+				vfst.TestPath("/home/user/foo",
+					vfst.TestModeIsRegular,
+					vfst.TestModePerm(0644),
+					vfst.TestContentsString(""),
+				),
+			},
+		},
+		{
 			name: "symlink",
 			root: map[string]interface{}{
 				"/home/user": map[string]interface{}{
