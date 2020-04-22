@@ -12,10 +12,13 @@ import (
 )
 
 func TestSourceStateApplyAll(t *testing.T) {
+	// FIXME refactor this to test ApplyOne with a target of foo
+	// FIXME script template tests
 	for _, tc := range []struct {
-		name  string
-		root  interface{}
-		tests []interface{}
+		name               string
+		root               interface{}
+		sourceStateOptions []SourceStateOption
+		tests              []interface{}
 	}{
 		{
 			name: "empty",
@@ -81,7 +84,7 @@ func TestSourceStateApplyAll(t *testing.T) {
 			},
 		},
 		{
-			name: "remove_empty",
+			name: "file_remove_empty",
 			root: map[string]interface{}{
 				"/home/user": map[string]interface{}{
 					"foo": "",
@@ -97,7 +100,7 @@ func TestSourceStateApplyAll(t *testing.T) {
 			},
 		},
 		{
-			name: "create_empty_file",
+			name: "file_create_empty",
 			root: map[string]interface{}{
 				"/home/user": map[string]interface{}{
 					".local/share/chezmoi": map[string]interface{}{
@@ -110,6 +113,28 @@ func TestSourceStateApplyAll(t *testing.T) {
 					vfst.TestModeIsRegular,
 					vfst.TestModePerm(0644),
 					vfst.TestContentsString(""),
+				),
+			},
+		},
+		{
+			name: "file_template",
+			root: map[string]interface{}{
+				"/home/user": map[string]interface{}{
+					".local/share/chezmoi": map[string]interface{}{
+						"foo.tmpl": "email = {{ .email }}",
+					},
+				},
+			},
+			sourceStateOptions: []SourceStateOption{
+				WithTemplateData(map[string]interface{}{
+					"email": "john.smith@company.com",
+				}),
+			},
+			tests: []interface{}{
+				vfst.TestPath("/home/user/foo",
+					vfst.TestModeIsRegular,
+					vfst.TestModePerm(0644),
+					vfst.TestContentsString("email = john.smith@company.com"),
 				),
 			},
 		},
@@ -129,6 +154,27 @@ func TestSourceStateApplyAll(t *testing.T) {
 				),
 			},
 		},
+		{
+			name: "symlink_template",
+			root: map[string]interface{}{
+				"/home/user": map[string]interface{}{
+					".local/share/chezmoi": map[string]interface{}{
+						"symlink_foo.tmpl": "bar_{{ .os }}",
+					},
+				},
+			},
+			sourceStateOptions: []SourceStateOption{
+				WithTemplateData(map[string]interface{}{
+					"os": "linux",
+				}),
+			},
+			tests: []interface{}{
+				vfst.TestPath("/home/user/foo",
+					vfst.TestModeType(os.ModeSymlink),
+					vfst.TestSymlinkTarget("bar_linux"),
+				),
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fs, cleanup, err := vfst.NewTestFS(tc.root)
@@ -136,10 +182,12 @@ func TestSourceStateApplyAll(t *testing.T) {
 			defer cleanup()
 
 			s := newTestRealSystem(fs)
-			ss := NewSourceState(
+			sourceStateOptions := []SourceStateOption{
 				WithSystem(s),
 				WithSourcePath("/home/user/.local/share/chezmoi"),
-			)
+			}
+			sourceStateOptions = append(sourceStateOptions, tc.sourceStateOptions...)
+			ss := NewSourceState(sourceStateOptions...)
 			require.NoError(t, ss.Read())
 			require.NoError(t, ss.Evaluate())
 			require.NoError(t, ss.ApplyAll(s, vfst.DefaultUmask, "/home/user"))

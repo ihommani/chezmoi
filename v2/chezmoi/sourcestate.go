@@ -1,7 +1,6 @@
 package chezmoi
 
 // FIXME encryption
-// FIXME templates
 
 import (
 	"bufio"
