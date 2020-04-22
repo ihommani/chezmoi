@@ -2,17 +2,21 @@ package chezmoi
 
 import "crypto/sha256"
 
+type contentsFunc func() ([]byte, error)
+
 // A lazyContents evaluates its contents lazily.
 type lazyContents struct {
-	contentsFunc   func() ([]byte, error)
+	contentsFunc   contentsFunc
 	contents       []byte
 	contentsErr    error
 	contentsSHA256 []byte
 }
 
+type linknameFunc func() (string, error)
+
 // A lazyLinkname evaluates its linkname lazily.
 type lazyLinkname struct {
-	linknameFunc func() (string, error)
+	linknameFunc linknameFunc
 	linkname     string
 	linknameErr  error
 }

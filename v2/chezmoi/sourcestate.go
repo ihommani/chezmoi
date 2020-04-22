@@ -254,66 +254,7 @@ func (ss *SourceState) Read() error {
 					},
 				}
 			}
-			lazyContents := &lazyContents{
-				contentsFunc: func() ([]byte, error) {
-					return ss.s.ReadFile(sourcePath)
-				},
-			}
-			var targetStateEntryFunc func() (TargetStateEntry, error)
-			switch fileAttributes.Type {
-			case SourceFileTypeFile:
-				targetStateEntryFunc = func() (TargetStateEntry, error) {
-					contents, err := lazyContents.Contents()
-					if err != nil {
-						return nil, err
-					}
-					if !fileAttributes.Empty && isEmpty(contents) {
-						return &TargetStateAbsent{}, nil
-					}
-					perm := os.FileMode(0o666)
-					if fileAttributes.Executable {
-						perm |= 0o111
-					}
-					if fileAttributes.Private {
-						perm &^= 0o77
-					}
-					perm &^= ss.umask
-					return &TargetStateFile{
-						lazyContents: newLazyContents(contents),
-						perm:         perm,
-					}, nil
-				}
-			case SourceFileTypeScript:
-				targetStateEntryFunc = func() (TargetStateEntry, error) {
-					contents, err := lazyContents.Contents()
-					if err != nil {
-						return nil, err
-					}
-					return &TargetStateScript{
-						lazyContents: newLazyContents(contents),
-						name:         fileAttributes.Name,
-						once:         fileAttributes.Once,
-					}, nil
-				}
-			case SourceFileTypeSymlink:
-				targetStateEntryFunc = func() (TargetStateEntry, error) {
-					linknameBytes, err := lazyContents.Contents()
-					if err != nil {
-						return nil, err
-					}
-					return &TargetStateSymlink{
-						lazyLinkname: newLazyLinkname(string(linknameBytes)),
-					}, nil
-				}
-			default:
-				panic(nil)
-			}
-			ss.entries[targetName] = &SourceStateFile{
-				lazyContents:         lazyContents,
-				path:                 sourcePath,
-				attributes:           fileAttributes,
-				targetStateEntryFunc: targetStateEntryFunc,
-			}
+			ss.entries[targetName] = ss.newSourceStateFile(sourcePath, fileAttributes)
 			return nil
 		default:
 			return &unsupportedFileTypeError{
@@ -443,6 +384,71 @@ func (ss *SourceState) executeTemplate(path string) ([]byte, error) {
 		return nil, err
 	}
 	return ss.ExecuteTemplateData(path, data)
+}
+
+func (ss *SourceState) newSourceStateFile(sourcePath string, fileAttributes FileAttributes) *SourceStateFile {
+	lazyContents := &lazyContents{
+		contentsFunc: func() ([]byte, error) {
+			return ss.s.ReadFile(sourcePath)
+		},
+	}
+
+	var targetStateEntryFunc func() (TargetStateEntry, error)
+	switch fileAttributes.Type {
+	case SourceFileTypeFile:
+		targetStateEntryFunc = func() (TargetStateEntry, error) {
+			contents, err := lazyContents.Contents()
+			if err != nil {
+				return nil, err
+			}
+			if !fileAttributes.Empty && isEmpty(contents) {
+				return &TargetStateAbsent{}, nil
+			}
+			perm := os.FileMode(0o666)
+			if fileAttributes.Executable {
+				perm |= 0o111
+			}
+			if fileAttributes.Private {
+				perm &^= 0o77
+			}
+			perm &^= ss.umask
+			return &TargetStateFile{
+				lazyContents: newLazyContents(contents),
+				perm:         perm,
+			}, nil
+		}
+	case SourceFileTypeScript:
+		targetStateEntryFunc = func() (TargetStateEntry, error) {
+			contents, err := lazyContents.Contents()
+			if err != nil {
+				return nil, err
+			}
+			return &TargetStateScript{
+				lazyContents: newLazyContents(contents),
+				name:         fileAttributes.Name,
+				once:         fileAttributes.Once,
+			}, nil
+		}
+	case SourceFileTypeSymlink:
+		targetStateEntryFunc = func() (TargetStateEntry, error) {
+			linknameBytes, err := lazyContents.Contents()
+			if err != nil {
+				return nil, err
+			}
+			return &TargetStateSymlink{
+				lazyLinkname: newLazyLinkname(string(linknameBytes)),
+			}, nil
+		}
+	default:
+		panic(fmt.Sprintf("unsupported type: %s", string(fileAttributes.Type)))
+	}
+
+	return &SourceStateFile{
+		lazyContents:         lazyContents,
+		path:                 sourcePath,
+		attributes:           fileAttributes,
+		targetStateEntryFunc: targetStateEntryFunc,
+	}
 }
 
 func (ss *SourceState) sortedTargetNames() []string {
