@@ -12,7 +12,6 @@ import (
 )
 
 func TestSourceStateApplyAll(t *testing.T) {
-	// FIXME refactor this to test ApplyOne with a target of foo
 	// FIXME script tests
 	// FIXME script template tests
 	for _, tc := range []struct {
