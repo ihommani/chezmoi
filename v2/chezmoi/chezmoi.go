@@ -14,6 +14,12 @@ const (
 
 // Configuration variables.
 var (
+	// DefaultTemplateOptions are the default template options.
+	DefaultTemplateOptions = []string{"missingkey=error"}
+
+	// DefaultUmask is the default umask.
+	DefaultUmask = os.FileMode(0o22)
+
 	scriptOnceStateBucket = []byte("script")
 )
 
@@ -40,9 +46,6 @@ const (
 	templatesDirName = chezmoiPrefix + "templates"
 	versionName      = chezmoiPrefix + "version"
 )
-
-// DefaultTemplateOptions are the default template options.
-var DefaultTemplateOptions = []string{"missingkey=error"}
 
 var modeTypeNames = map[os.FileMode]string{
 	0:                 "file",

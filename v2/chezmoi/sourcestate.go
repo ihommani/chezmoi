@@ -18,10 +18,10 @@ import (
 
 // A SourceState is a source state.
 type SourceState struct {
+	Entries         map[string]SourceStateEntry
 	s               System
 	sourcePath      string
 	umask           os.FileMode
-	sourceEntries   map[string]SourceStateEntry
 	encryptionTool  EncryptionTool
 	ignore          *PatternSet
 	minVersion      *semver.Version
@@ -87,8 +87,8 @@ func WithUmask(umask os.FileMode) SourceStateOption {
 // NewSourceState creates a new source state with the given options.
 func NewSourceState(options ...SourceStateOption) *SourceState {
 	ss := &SourceState{
-		umask:           0o22,
-		sourceEntries:   make(map[string]SourceStateEntry),
+		Entries:         make(map[string]SourceStateEntry),
+		umask:           DefaultUmask,
 		encryptionTool:  &nullEncryptionTool{},
 		ignore:          NewPatternSet(),
 		remove:          NewPatternSet(),
@@ -122,7 +122,7 @@ func (ss *SourceState) ApplyOne(s System, umask os.FileMode, targetDir, targetNa
 	if err != nil {
 		return err
 	}
-	targetStateEntry, err := ss.sourceEntries[targetName].TargetStateEntry()
+	targetStateEntry, err := ss.Entries[targetName].TargetStateEntry()
 	if err != nil {
 		return err
 	}
@@ -143,7 +143,7 @@ func (ss *SourceState) ApplyOne(s System, umask os.FileMode, targetDir, targetNa
 			}
 			sort.Strings(baseNames)
 			for _, baseName := range baseNames {
-				if _, ok := ss.sourceEntries[path.Join(targetName, baseName)]; !ok {
+				if _, ok := ss.Entries[path.Join(targetName, baseName)]; !ok {
 					if err := s.RemoveAll(path.Join(targetPath, baseName)); err != nil {
 						return err
 					}
@@ -263,7 +263,7 @@ func (ss *SourceState) Read() error {
 
 	// Populate ss.sourceEntries with the unique source entry for each target.
 	for targetName, sourceEntries := range allSourceEntries {
-		ss.sourceEntries[targetName] = sourceEntries[0]
+		ss.Entries[targetName] = sourceEntries[0]
 	}
 	return nil
 }
@@ -303,7 +303,7 @@ func (ss *SourceState) Remove(s System, targetDir string) error {
 // Evaluate evaluates every target state entry in s.
 func (ss *SourceState) Evaluate() error {
 	for _, targetName := range ss.sortedTargetNames() {
-		sourceStateEntry := ss.sourceEntries[targetName]
+		sourceStateEntry := ss.Entries[targetName]
 		if err := sourceStateEntry.Evaluate(); err != nil {
 			return err
 		}
@@ -522,8 +522,8 @@ func (ss *SourceState) newSourceStateFile(sourcePath string, fileAttributes File
 
 // sortedTargetNames returns all of ss's target names in order.
 func (ss *SourceState) sortedTargetNames() []string {
-	targetNames := make([]string, 0, len(ss.sourceEntries))
-	for targetName := range ss.sourceEntries {
+	targetNames := make([]string, 0, len(ss.Entries))
+	for targetName := range ss.Entries {
 		targetNames = append(targetNames, targetName)
 	}
 	sort.Strings(targetNames)
