@@ -441,7 +441,8 @@ func (ss *SourceState) newSourceStateFile(sourcePath string, fileAttributes File
 			if !fileAttributes.Encrypted {
 				return contents, nil
 			}
-			return ss.encryptionTool.Decrypt(contents)
+			// FIXME pass targetName as filenameHint
+			return ss.encryptionTool.Decrypt(sourcePath, contents)
 		},
 	}
 

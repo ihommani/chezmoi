@@ -11,15 +11,15 @@ import (
 	"go.uber.org/multierr"
 )
 
-// GPGEncyptionTool interfaces with gpg.
-type GPGEncyptionTool struct {
+// GPGEncryptionTool interfaces with gpg.
+type GPGEncryptionTool struct {
 	Command   string
 	Recipient string
 	Symmetric bool
 }
 
 // Decrypt implements EncyptionTool.Decrypt.
-func (g *GPGEncyptionTool) Decrypt(filenameHint string, ciphertext []byte) (plaintext []byte, err error) {
+func (g *GPGEncryptionTool) Decrypt(filenameHint string, ciphertext []byte) (plaintext []byte, err error) {
 	filename, cleanup, err := g.DecryptToFile(filenameHint, ciphertext)
 	if err != nil {
 		return
@@ -31,9 +31,7 @@ func (g *GPGEncyptionTool) Decrypt(filenameHint string, ciphertext []byte) (plai
 }
 
 // DecryptToFile implements EncyptionTool.DecryptToFile.
-func (g *GPGEncyptionTool) DecryptToFile(filenameHint string, ciphertext []byte) (filename string, cleanupFunc CleanupFunc, err error) {
-	cleanupFunc = nullCleanupFunc
-
+func (g *GPGEncryptionTool) DecryptToFile(filenameHint string, ciphertext []byte) (filename string, cleanupFunc CleanupFunc, err error) {
 	tempDir, err := ioutil.TempDir("", "chezmoi-gpg-decrypt")
 	if err != nil {
 		return
@@ -45,6 +43,7 @@ func (g *GPGEncyptionTool) DecryptToFile(filenameHint string, ciphertext []byte)
 	filename = filepath.Join(tempDir, filepath.Base(filenameHint))
 	inputFilename := filename + ".gpg"
 	if err = ioutil.WriteFile(inputFilename, ciphertext, 0o600); err != nil {
+		err = multierr.Append(err, cleanupFunc())
 		return
 	}
 
@@ -58,13 +57,16 @@ func (g *GPGEncyptionTool) DecryptToFile(filenameHint string, ciphertext []byte)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	err = cmd.Run()
+	if err = cmd.Run(); err != nil {
+		err = multierr.Append(err, cleanupFunc())
+		return
+	}
 
 	return
 }
 
 // Encrypt implements EncryptionTool.Encypt.
-func (g *GPGEncyptionTool) Encrypt(plaintext []byte) (ciphertext []byte, err error) {
+func (g *GPGEncryptionTool) Encrypt(plaintext []byte) (ciphertext []byte, err error) {
 	tempFile, err := ioutil.TempFile("", "chezmoi-gpg-encrypt")
 	if err != nil {
 		return
@@ -85,9 +87,16 @@ func (g *GPGEncyptionTool) Encrypt(plaintext []byte) (ciphertext []byte, err err
 }
 
 // EncryptFile implements EncryptionTool.EncryptFile.
-func (g *GPGEncyptionTool) EncryptFile(filename string) (ciphertext []byte, err error) {
-	outputFilename := filename + ".gpg"
+func (g *GPGEncryptionTool) EncryptFile(filename string) (ciphertext []byte, err error) {
+	tempDir, err := ioutil.TempDir("", "chezmoi-gpg-encrypt")
+	if err != nil {
+		return
+	}
+	defer func() {
+		err = multierr.Append(err, os.RemoveAll(tempDir))
+	}()
 
+	outputFilename := filepath.Join(tempDir, filepath.Base(filename)+".gpg")
 	args := []string{
 		"--armor",
 		"--output", outputFilename,
