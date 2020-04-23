@@ -1,6 +1,6 @@
 package chezmoi
 
-// FIXME this file needs a proper review in the morning
+// FIXME document gpg.args
 
 import (
 	"io/ioutil"
@@ -11,16 +11,17 @@ import (
 	"go.uber.org/multierr"
 )
 
-// GPGEncryptionTool interfaces with gpg.
+// A GPGEncryptionTool uses gpg for encryption and decryption.
 type GPGEncryptionTool struct {
 	Command   string
+	Args      []string
 	Recipient string
 	Symmetric bool
 }
 
 // Decrypt implements EncyptionTool.Decrypt.
-func (g *GPGEncryptionTool) Decrypt(filenameHint string, ciphertext []byte) (plaintext []byte, err error) {
-	filename, cleanup, err := g.DecryptToFile(filenameHint, ciphertext)
+func (t *GPGEncryptionTool) Decrypt(filenameHint string, ciphertext []byte) (plaintext []byte, err error) {
+	filename, cleanup, err := t.DecryptToFile(filenameHint, ciphertext)
 	if err != nil {
 		return
 	}
@@ -31,7 +32,7 @@ func (g *GPGEncryptionTool) Decrypt(filenameHint string, ciphertext []byte) (pla
 }
 
 // DecryptToFile implements EncyptionTool.DecryptToFile.
-func (g *GPGEncryptionTool) DecryptToFile(filenameHint string, ciphertext []byte) (filename string, cleanupFunc CleanupFunc, err error) {
+func (t *GPGEncryptionTool) DecryptToFile(filenameHint string, ciphertext []byte) (filename string, cleanupFunc CleanupFunc, err error) {
 	tempDir, err := ioutil.TempDir("", "chezmoi-gpg-decrypt")
 	if err != nil {
 		return
@@ -47,17 +48,18 @@ func (g *GPGEncryptionTool) DecryptToFile(filenameHint string, ciphertext []byte
 		return
 	}
 
-	//nolint:gosec
-	cmd := exec.Command(
-		g.Command,
+	args := []string{
+		"--armor",
+		"--decrypt",
 		"--output", filename,
 		"--quiet",
-		"--decrypt", inputFilename,
-	)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err = cmd.Run(); err != nil {
+	}
+	if t.Symmetric {
+		args = append(args, "--symmetric")
+	}
+	args = append(args, inputFilename)
+
+	if err = t.runWithArgs(args); err != nil {
 		err = multierr.Append(err, cleanupFunc())
 		return
 	}
@@ -66,7 +68,7 @@ func (g *GPGEncryptionTool) DecryptToFile(filenameHint string, ciphertext []byte
 }
 
 // Encrypt implements EncryptionTool.Encypt.
-func (g *GPGEncryptionTool) Encrypt(plaintext []byte) (ciphertext []byte, err error) {
+func (t *GPGEncryptionTool) Encrypt(plaintext []byte) (ciphertext []byte, err error) {
 	tempFile, err := ioutil.TempFile("", "chezmoi-gpg-encrypt")
 	if err != nil {
 		return
@@ -83,11 +85,11 @@ func (g *GPGEncryptionTool) Encrypt(plaintext []byte) (ciphertext []byte, err er
 		return
 	}
 
-	return g.EncryptFile(tempFile.Name())
+	return t.EncryptFile(tempFile.Name())
 }
 
 // EncryptFile implements EncryptionTool.EncryptFile.
-func (g *GPGEncryptionTool) EncryptFile(filename string) (ciphertext []byte, err error) {
+func (t *GPGEncryptionTool) EncryptFile(filename string) (ciphertext []byte, err error) {
 	tempDir, err := ioutil.TempDir("", "chezmoi-gpg-encrypt")
 	if err != nil {
 		return
@@ -99,28 +101,31 @@ func (g *GPGEncryptionTool) EncryptFile(filename string) (ciphertext []byte, err
 	outputFilename := filepath.Join(tempDir, filepath.Base(filename)+".gpg")
 	args := []string{
 		"--armor",
+		"--encrypt",
 		"--output", outputFilename,
 		"--quiet",
 	}
-	if g.Symmetric {
+	switch {
+	case t.Symmetric:
 		args = append(args, "--symmetric")
-	} else {
-		if g.Recipient != "" {
-			args = append(args, "--recipient", g.Recipient)
-		}
-		args = append(args, "--encrypt")
+	case t.Recipient != "":
+		args = append(args, "--recipient", t.Recipient)
 	}
 	args = append(args, filename)
 
-	//nolint:gosec
-	cmd := exec.Command(g.Command, args...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err = cmd.Run(); err != nil {
+	if err = t.runWithArgs(args); err != nil {
 		return
 	}
 
 	ciphertext, err = ioutil.ReadFile(outputFilename)
 	return
+}
+
+func (t *GPGEncryptionTool) runWithArgs(args []string) error {
+	//nolint:gosec
+	cmd := exec.Command(t.Command, append(t.Args, args...)...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }

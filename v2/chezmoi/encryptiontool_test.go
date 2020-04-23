@@ -79,57 +79,67 @@ func (t *testEncryptionTool) xorWithKey(input []byte) []byte {
 	return output
 }
 
-func TestTestEncryptionToolDecryptToFile(t *testing.T) {
-	et := newTestEncryptionTool()
-	expectedPlaintext := []byte("secret")
+func testEncryptionToolDecryptToFile(t *testing.T, et EncryptionTool) {
+	t.Run("DecryptToFile", func(t *testing.T) {
+		expectedPlaintext := []byte("secret")
 
-	actualCiphertext, err := et.Encrypt(expectedPlaintext)
-	require.NoError(t, err)
-	assert.NotEqual(t, expectedPlaintext, actualCiphertext)
+		actualCiphertext, err := et.Encrypt(expectedPlaintext)
+		require.NoError(t, err)
+		assert.NotEqual(t, expectedPlaintext, actualCiphertext)
 
-	filenameHint := "filename.txt"
-	filename, cleanup, err := et.DecryptToFile(filenameHint, actualCiphertext)
-	require.NoError(t, err)
-	assert.True(t, strings.Contains(filename, filenameHint))
-	assert.NotNil(t, cleanup)
-	defer func() {
-		assert.NoError(t, cleanup())
-	}()
+		filenameHint := "filename.txt"
+		filename, cleanup, err := et.DecryptToFile(filenameHint, actualCiphertext)
+		require.NoError(t, err)
+		assert.True(t, strings.Contains(filename, filenameHint))
+		assert.NotNil(t, cleanup)
+		defer func() {
+			assert.NoError(t, cleanup())
+		}()
 
-	actualPlaintext, err := ioutil.ReadFile(filename)
-	require.NoError(t, err)
-	assert.Equal(t, expectedPlaintext, actualPlaintext)
+		actualPlaintext, err := ioutil.ReadFile(filename)
+		require.NoError(t, err)
+		assert.Equal(t, expectedPlaintext, actualPlaintext)
+	})
 }
 
-func TestTestEncryptionToolEncryptDecrypt(t *testing.T) {
-	et := newTestEncryptionTool()
-	expectedPlaintext := []byte("secret")
+func testEncryptionToolEncryptDecrypt(t *testing.T, et EncryptionTool) {
+	t.Run("EncryptDecrypt", func(t *testing.T) {
+		expectedPlaintext := []byte("secret")
 
-	actualCiphertext, err := et.Encrypt(expectedPlaintext)
-	require.NoError(t, err)
-	assert.NotEqual(t, expectedPlaintext, actualCiphertext)
+		actualCiphertext, err := et.Encrypt(expectedPlaintext)
+		require.NoError(t, err)
+		assert.NotEqual(t, expectedPlaintext, actualCiphertext)
 
-	actualPlaintext, err := et.Decrypt("", actualCiphertext)
-	require.NoError(t, err)
-	assert.Equal(t, expectedPlaintext, actualPlaintext)
+		actualPlaintext, err := et.Decrypt("", actualCiphertext)
+		require.NoError(t, err)
+		assert.Equal(t, expectedPlaintext, actualPlaintext)
+	})
 }
 
-func TestTestEncryptionToolEncryptFile(t *testing.T) {
+func testEncryptionToolEncryptFile(t *testing.T, et EncryptionTool) {
+	t.Run("EncryptFile", func(t *testing.T) {
+		expectedPlaintext := []byte("secret")
+
+		tempFile, err := ioutil.TempFile("", "chezmoi-test-encyrption-tool")
+		require.NoError(t, err)
+		defer func() {
+			assert.NoError(t, os.RemoveAll(tempFile.Name()))
+		}()
+		require.NoError(t, ioutil.WriteFile(tempFile.Name(), expectedPlaintext, 0o600))
+
+		actualCiphertext, err := et.EncryptFile(tempFile.Name())
+		require.NoError(t, err)
+		assert.NotEqual(t, expectedPlaintext, actualCiphertext)
+
+		actualPlaintext, err := et.Decrypt("", actualCiphertext)
+		require.NoError(t, err)
+		assert.Equal(t, expectedPlaintext, actualPlaintext)
+	})
+}
+
+func TestTestEncruptionTool(t *testing.T) {
 	et := newTestEncryptionTool()
-
-	tempFile, err := ioutil.TempFile("", "chezmoi-test-encyrption-tool")
-	require.NoError(t, err)
-	defer func() {
-		assert.NoError(t, os.RemoveAll(tempFile.Name()))
-	}()
-	expectedPlaintext := []byte("secret")
-	require.NoError(t, ioutil.WriteFile(tempFile.Name(), expectedPlaintext, 0o600))
-
-	actualCiphertext, err := et.EncryptFile(tempFile.Name())
-	require.NoError(t, err)
-	assert.NotEqual(t, expectedPlaintext, actualCiphertext)
-
-	actualPlaintext, err := et.Decrypt("", actualCiphertext)
-	require.NoError(t, err)
-	assert.Equal(t, expectedPlaintext, actualPlaintext)
+	testEncryptionToolDecryptToFile(t, et)
+	testEncryptionToolEncryptDecrypt(t, et)
+	testEncryptionToolEncryptFile(t, et)
 }

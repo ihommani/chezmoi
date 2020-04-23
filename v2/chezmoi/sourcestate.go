@@ -1,7 +1,5 @@
 package chezmoi
 
-// FIXME encryption
-
 import (
 	"bufio"
 	"bytes"
