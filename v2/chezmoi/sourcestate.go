@@ -24,6 +24,7 @@ type SourceState struct {
 	sourcePath      string
 	umask           os.FileMode
 	sourceEntries   map[string]SourceStateEntry
+	encryptionTool  EncryptionTool
 	ignore          *PatternSet
 	minVersion      *semver.Version
 	remove          *PatternSet
@@ -36,10 +37,10 @@ type SourceState struct {
 // A SourceStateOption sets an option on a source state.
 type SourceStateOption func(*SourceState)
 
-// WithSystem sets the system.
-func WithSystem(s System) SourceStateOption {
+// WithEncryptionTool set the encryption tool.
+func WithEncryptionTool(encryptionTool EncryptionTool) SourceStateOption {
 	return func(ss *SourceState) {
-		ss.s = s
+		ss.encryptionTool = encryptionTool
 	}
 }
 
@@ -47,6 +48,13 @@ func WithSystem(s System) SourceStateOption {
 func WithSourcePath(sourcePath string) SourceStateOption {
 	return func(ss *SourceState) {
 		ss.sourcePath = sourcePath
+	}
+}
+
+// WithSystem sets the system.
+func WithSystem(s System) SourceStateOption {
+	return func(ss *SourceState) {
+		ss.s = s
 	}
 }
 
@@ -83,6 +91,7 @@ func NewSourceState(options ...SourceStateOption) *SourceState {
 	ss := &SourceState{
 		umask:           0o22,
 		sourceEntries:   make(map[string]SourceStateEntry),
+		encryptionTool:  &nullEncryptionTool{},
 		ignore:          NewPatternSet(),
 		remove:          NewPatternSet(),
 		templateOptions: DefaultTemplateOptions,
@@ -425,7 +434,14 @@ func (ss *SourceState) newSourceStateDir(sourcePath string, dirAttributes DirAtt
 func (ss *SourceState) newSourceStateFile(sourcePath string, fileAttributes FileAttributes) *SourceStateFile {
 	lazyContents := &lazyContents{
 		contentsFunc: func() ([]byte, error) {
-			return ss.s.ReadFile(sourcePath)
+			contents, err := ss.s.ReadFile(sourcePath)
+			if err != nil {
+				return nil, err
+			}
+			if !fileAttributes.Encrypted {
+				return contents, nil
+			}
+			return ss.encryptionTool.Decrypt(contents)
 		},
 	}
 

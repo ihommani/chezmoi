@@ -13,6 +13,7 @@ import (
 
 func TestSourceStateApplyAll(t *testing.T) {
 	// FIXME refactor this to test ApplyOne with a target of foo
+	// FIXME script tests
 	// FIXME script template tests
 	for _, tc := range []struct {
 		name               string
@@ -548,6 +549,7 @@ func TestSourceStateRead(t *testing.T) {
 }
 
 func TestSourceStateRemove(t *testing.T) {
+	// FIXME test doublestar globs
 	for _, tc := range []struct {
 		name  string
 		root  interface{}

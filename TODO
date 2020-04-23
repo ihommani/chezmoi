@@ -1,6 +1,6 @@
 Add dir to RunScript?
+Encryption should use System.IdempotentCommandOutput
 Encryption
-Templates
 
 script name is currently part of run once state (in key)
 need to decide whether rename of script means its a different script
